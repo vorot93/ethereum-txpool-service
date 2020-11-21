@@ -20,12 +20,16 @@ async fn real_main() {
 
     let data_provider = data_provider::Web3DataProvider::new(web3_addr).unwrap();
 
-    let pool = Arc::new(AsyncMutex::new(Pool::new(data_provider)));
+    let pool = Arc::new(AsyncMutex::new(Pool::new()));
 
     tasks.spawn({
         let pool = pool.clone();
         async move {
-            let svc = TxpoolServer::new(TxpoolService::new(pool, U256::from(10_000_000_000_u64)));
+            let svc = TxpoolServer::new(TxpoolService::new(
+                pool,
+                data_provider,
+                U256::from(10_000_000_000_u64),
+            ));
 
             info!("Sentry gRPC server starting on {}", grpc_server_addr);
 

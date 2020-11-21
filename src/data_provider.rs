@@ -1,8 +1,17 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
-use ethereum_txpool::{AccountInfo, AccountInfoProvider};
+use ethereum_txpool::AccountInfo;
 use ethereum_types::{Address, H256};
 use std::{convert::TryInto, fmt::Display};
+
+#[async_trait]
+pub trait AccountInfoProvider: Send + Sync + 'static {
+    async fn get_account_info(
+        &self,
+        block: H256,
+        address: Address,
+    ) -> anyhow::Result<Option<AccountInfo>>;
+}
 
 pub struct Web3DataProvider {
     client: web3::Web3<web3::transports::Http>,

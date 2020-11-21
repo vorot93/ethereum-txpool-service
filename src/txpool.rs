@@ -1,11 +1,15 @@
-use crate::grpc::txpool::{self, txpool_server::Txpool, *};
+use crate::{
+    data_provider::*,
+    grpc::txpool::{self, txpool_server::Txpool, *},
+};
 use async_trait::async_trait;
 use auto_impl::auto_impl;
 use ethereum::Transaction;
-use ethereum_txpool::{AccountInfoProvider, ImportError, Pool};
+use ethereum_txpool::{ImportError, Pool};
 use ethereum_types::*;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::Mutex as AsyncMutex;
+use tracing::*;
 use txpool::TxHashes;
 
 #[auto_impl(&, Box, Arc)]
@@ -20,13 +24,18 @@ impl GasPricer for U256 {
 }
 
 pub struct TxpoolService<DP: AccountInfoProvider, GP: GasPricer> {
-    pool: Arc<AsyncMutex<Pool<DP>>>,
+    pool: Arc<AsyncMutex<Pool>>,
+    data_provider: DP,
     gas_pricer: GP,
 }
 
 impl<DP: AccountInfoProvider, GP: GasPricer> TxpoolService<DP, GP> {
-    pub fn new(pool: Arc<AsyncMutex<Pool<DP>>>, gas_pricer: GP) -> Self {
-        Self { pool, gas_pricer }
+    pub fn new(pool: Arc<AsyncMutex<Pool>>, data_provider: DP, gas_pricer: GP) -> Self {
+        Self {
+            pool,
+            data_provider,
+            gas_pricer,
+        }
     }
 }
 
@@ -72,25 +81,88 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
 
         let minimum_gas_price = self.gas_pricer.minimum_gas_price();
 
-        let txs = txs.into_iter().filter_map(|bytes| {
-            if let Ok(tx) = rlp::decode::<Transaction>(&bytes) {
-                if tx.gas_price >= minimum_gas_price {
-                    return Some(tx);
+        let txs = txs
+            .into_iter()
+            .filter_map(|bytes| {
+                if let Ok(tx) = rlp::decode::<Transaction>(&bytes) {
+                    if tx.gas_price >= minimum_gas_price {
+                        return Some(tx);
+                    } else {
+                        out.push(InjectResult::FeeTooLow);
+                    }
                 } else {
-                    out.push(InjectResult::FeeTooLow);
+                    out.push(InjectResult::Invalid);
                 }
-            } else {
-                out.push(InjectResult::Invalid);
-            }
-            None
-        });
+                None
+            })
+            .collect::<Vec<_>>();
 
-        let results = self.pool.lock().await.import_many(txs).await;
+        let results = {
+            let mut pool = self.pool.lock().await;
+
+            // First pass: try to import with the state that's already there.
+            let mut v = pool.import_many(txs.iter().cloned());
+
+            if let Some(block) = pool.current_block() {
+                // Assemble a full list of addresses for which we will request the state.
+                let missing_state = v.iter().enumerate().fold(
+                    HashMap::<Address, Vec<usize>>::new(),
+                    |mut all, (idx, res)| {
+                        if let Err(ImportError::NoState(address)) = res {
+                            all.entry(*address).or_default().push(idx);
+                        }
+
+                        all
+                    },
+                );
+
+                debug!(
+                    "missing state for addresses: {:?}",
+                    missing_state.keys().collect::<Vec<_>>()
+                );
+
+                // Fetch missing state.
+                let additional_state = futures::future::join_all(missing_state.into_iter().map(
+                    |(address, idxs)| async move {
+                        (
+                            self.data_provider
+                                .get_account_info(block.hash, address)
+                                .await,
+                            address,
+                            idxs,
+                        )
+                    },
+                ))
+                .await;
+
+                let mut retry_tx_chains = Vec::with_capacity(additional_state.len());
+                // Import missing state.
+                for (res, address, idxs) in additional_state {
+                    if let Ok(Some(info)) = res {
+                        pool.add_account_state(address, info);
+                        retry_tx_chains.push(idxs);
+                    }
+                }
+
+                // Second pass: import the transactions again
+                for chain in retry_tx_chains {
+                    for (idx, res) in pool
+                        .import_many(chain.iter().map(|&idx| txs[idx].clone()))
+                        .into_iter()
+                        .enumerate()
+                    {
+                        v[chain[idx]] = res;
+                    }
+                }
+            }
+
+            v
+        };
 
         Ok(tonic::Response::new(InjectReply {
             injected: out
                 .into_iter()
-                .chain(results.into_iter().map(|(_, res)| match res {
+                .chain(results.into_iter().map(|res| match res {
                     Ok(imported) => {
                         if imported {
                             InjectResult::AlreadyExists
@@ -99,6 +171,7 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
                         }
                     }
                     Err(e) => match e {
+                        ImportError::NoState(_) => InjectResult::InternalError,
                         ImportError::InvalidTransaction(_) => InjectResult::Invalid,
                         ImportError::NonceGap => InjectResult::InternalError,
                         ImportError::StaleTransaction => InjectResult::Stale,
