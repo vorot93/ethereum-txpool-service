@@ -1,4 +1,7 @@
-use crate::{grpc::txpool::txpool_server::TxpoolServer, txpool::TxpoolService};
+use crate::{
+    config::*, data_provider::*, grpc::txpool::txpool_server::TxpoolServer, txpool::TxpoolService,
+};
+use clap::Clap;
 use ethereum_txpool::Pool;
 use ethereum_types::U256;
 use std::{sync::Arc, time::Duration};
@@ -7,18 +10,32 @@ use tokio::{sync::Mutex as AsyncMutex, time::sleep};
 use tokio_compat_02::*;
 use tonic::transport::Server;
 use tracing::*;
+use tracing_subscriber::EnvFilter;
 
+mod config;
 mod data_provider;
 mod grpc;
 mod txpool;
 
 async fn real_main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(EnvFilter::from_default_env())
+        .init();
+
+    let opts =
+        toml::from_str::<Config>(&std::fs::read_to_string(Opts::parse().config_path).unwrap())
+            .unwrap();
+
     let tasks = Arc::new(TaskGroup::new());
 
-    let web3_addr = "127.0.0.1:5455";
-    let grpc_server_addr = "127.0.0.1:8080".parse().unwrap();
+    let data_provider: Arc<dyn AccountInfoProvider> = match opts.data_provider {
+        config::DataProvider::Web3 { addr } => Arc::new(Web3DataProvider::new(addr).unwrap()),
+        config::DataProvider::Grpc { addr } => {
+            Arc::new(GrpcDataProvider::connect(addr).await.unwrap())
+        }
+    };
 
-    let data_provider = data_provider::Web3DataProvider::new(web3_addr).unwrap();
+    let listen_addr = opts.listen_addr.parse().unwrap();
 
     let pool = Arc::new(AsyncMutex::new(Pool::new()));
 
@@ -31,11 +48,11 @@ async fn real_main() {
                 U256::from(10_000_000_000_u64),
             ));
 
-            info!("Sentry gRPC server starting on {}", grpc_server_addr);
+            info!("Sentry gRPC server starting on {}", listen_addr);
 
             Server::builder()
                 .add_service(svc)
-                .serve(grpc_server_addr)
+                .serve(listen_addr)
                 .await
                 .unwrap();
         }
