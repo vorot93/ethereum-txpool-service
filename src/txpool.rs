@@ -71,10 +71,10 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
         }))
     }
 
-    async fn inject_transactions(
+    async fn import_transactions(
         &self,
-        request: tonic::Request<InjectRequest>,
-    ) -> Result<tonic::Response<InjectReply>, tonic::Status> {
+        request: tonic::Request<ImportRequest>,
+    ) -> Result<tonic::Response<ImportReply>, tonic::Status> {
         let txs = request.into_inner().txs;
 
         let mut out = Vec::with_capacity(txs.len());
@@ -88,10 +88,10 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
                     if tx.gas_price >= minimum_gas_price {
                         return Some(tx);
                     } else {
-                        out.push(InjectResult::FeeTooLow);
+                        out.push(ImportResult::FeeTooLow);
                     }
                 } else {
-                    out.push(InjectResult::Invalid);
+                    out.push(ImportResult::Invalid);
                 }
                 None
             })
@@ -159,27 +159,27 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
             v
         };
 
-        Ok(tonic::Response::new(InjectReply {
-            injected: out
+        Ok(tonic::Response::new(ImportReply {
+            imported: out
                 .into_iter()
                 .chain(results.into_iter().map(|res| match res {
                     Ok(imported) => {
                         if imported {
-                            InjectResult::AlreadyExists
+                            ImportResult::AlreadyExists
                         } else {
-                            InjectResult::Success
+                            ImportResult::Success
                         }
                     }
                     Err(e) => match e {
-                        ImportError::NoState(_) => InjectResult::InternalError,
-                        ImportError::InvalidTransaction(_) => InjectResult::Invalid,
-                        ImportError::NonceGap => InjectResult::InternalError,
-                        ImportError::StaleTransaction => InjectResult::Stale,
-                        ImportError::InvalidSender(_) => InjectResult::Invalid,
-                        ImportError::FeeTooLow => InjectResult::FeeTooLow,
-                        ImportError::InsufficientBalance => InjectResult::Invalid,
-                        ImportError::NoCurrentBlock => InjectResult::InternalError,
-                        ImportError::Other(_) => InjectResult::InternalError,
+                        ImportError::NoState(_) => ImportResult::InternalError,
+                        ImportError::InvalidTransaction(_) => ImportResult::Invalid,
+                        ImportError::NonceGap => ImportResult::InternalError,
+                        ImportError::StaleTransaction => ImportResult::Stale,
+                        ImportError::InvalidSender(_) => ImportResult::Invalid,
+                        ImportError::FeeTooLow => ImportResult::FeeTooLow,
+                        ImportError::InsufficientBalance => ImportResult::Invalid,
+                        ImportError::NoCurrentBlock => ImportResult::InternalError,
+                        ImportError::Other(_) => ImportResult::InternalError,
                     },
                 }))
                 .map(|v| v as i32)
