@@ -202,7 +202,7 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
             .filter_map(|hash| {
                 if hash.len() == H256::len_bytes() {
                     if let Some(tx) = pool.get(H256::from_slice(&hash)) {
-                        return Some(rlp::encode(tx));
+                        return Some(rlp::encode(tx).to_vec());
                     }
                 }
 

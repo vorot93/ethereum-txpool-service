@@ -29,9 +29,11 @@ async fn real_main() {
     let tasks = Arc::new(TaskGroup::new());
 
     let data_provider: Arc<dyn AccountInfoProvider> = match opts.data_provider {
-        config::DataProvider::Web3 { addr } => Arc::new(Web3DataProvider::new(addr).unwrap()),
-        config::DataProvider::Grpc { addr } => {
-            Arc::new(GrpcDataProvider::connect(addr).await.unwrap())
+        config::DataProvider::Tarpc { addr } => {
+            Arc::new(TarpcDataProvider::new(addr).await.unwrap())
+        }
+        config::DataProvider::Control { addr } => {
+            Arc::new(ControlDataProvider::connect(addr).await.unwrap())
         }
     };
 

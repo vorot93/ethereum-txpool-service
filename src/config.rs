@@ -15,8 +15,8 @@ pub struct Opts {
 #[derive(Deserialize)]
 #[serde(tag = "kind")]
 pub enum DataProvider {
-    Web3 { addr: String },
-    Grpc { addr: String },
+    Tarpc { addr: String },
+    Control { addr: String },
 }
 
 #[derive(Deserialize)]
