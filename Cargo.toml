@@ -10,29 +10,24 @@ anyhow = "1"
 async-trait = "0.1"
 auto_impl = "0.4"
 clap = { version = "3.0.0-beta" }
-ethereum = { git = "https://github.com/rust-blockchain/ethereum", branch = "vorot93/dev" }
+ethereum = "0.7"
+ethereum-interfaces = { git = "https://github.com/rust-ethereum/interfaces", default-features = false, features = ["txpool"] }
 ethereum-tarpc-api = { git = "https://github.com/rust-ethereum/tarpc-api" }
-ethereum-txpool = { git = "https://github.com/rust-ethereum/txpool", branch = "dev" }
-ethereum-types = { git = "https://github.com/paritytech/parity-common" }
+ethereum-txpool = { git = "https://github.com/rust-ethereum/txpool" }
+ethereum-types = "0.11"
 futures = "0.3"
 hex = "0.4"
 hex-literal = "0.3"
-prost = "0.6"
-rlp = { git = "https://github.com/paritytech/parity-common" }
-secp256k1 = { version = "0.19", features = ["endomorphism"] }
+rlp = "0.5"
 serde = { version = "1", features = ["derive"] }
 sha3 = "0.9"
 stubborn-io = "0.3"
 task-group = { git = "https://github.com/vorot93/task-group" }
 tokio = { version = "1", features = ["full"] }
-tokio-compat-02 = { git = "https://github.com/vorot93/tokio-compat-02", branch = "vorot93/tokio-1" }
 toml = "0.5"
 tarpc = { version = "0.24", features = ["full"] }
 tokio-serde = { version = "0.8", features = ["bincode"] }
-tonic = "0.3"
+tonic = "0.4"
 tracing = "0.1"
 tracing-subscriber = "0.2"
 url = "2"
-
-[build-dependencies]
-tonic-build = "0.3"

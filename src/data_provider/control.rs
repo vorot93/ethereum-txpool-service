@@ -1,8 +1,9 @@
 use super::AccountInfoProvider;
-use crate::grpc::txpool_control::{txpool_control_client::*, *};
+use crate::grpc::txpool::{txpool_control_client::*, *};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use ethereum_txpool::AccountInfo;
-use ethereum_types::{Address, H256, U256};
+use ethereum_types::{Address, H256};
 use std::fmt::Display;
 use tonic::transport::Channel;
 
@@ -29,15 +30,18 @@ impl AccountInfoProvider for ControlDataProvider {
             .client
             .clone()
             .account_info(AccountInfoRequest {
-                block_hash: block.to_fixed_bytes().to_vec(),
-                account: address.to_fixed_bytes().to_vec(),
+                block_hash: Some(block.into()),
+                account: Some(address.into()),
             })
             .await?
             .into_inner();
 
         Ok(Some(AccountInfo {
-            balance: U256::from_big_endian(&acc_info.balance),
-            nonce: U256::from_big_endian(&acc_info.nonce).as_u64(),
+            balance: acc_info
+                .balance
+                .ok_or_else(|| anyhow!("no balance"))?
+                .into(),
+            nonce: acc_info.nonce,
         }))
     }
 }

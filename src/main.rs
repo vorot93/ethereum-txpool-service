@@ -7,7 +7,6 @@ use ethereum_types::U256;
 use std::{sync::Arc, time::Duration};
 use task_group::TaskGroup;
 use tokio::{sync::Mutex as AsyncMutex, time::sleep};
-use tokio_compat_02::*;
 use tonic::transport::Server;
 use tracing::*;
 use tracing_subscriber::EnvFilter;
@@ -17,7 +16,8 @@ mod data_provider;
 mod grpc;
 mod txpool;
 
-async fn real_main() {
+#[tokio::main]
+async fn main() {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
@@ -65,9 +65,4 @@ async fn real_main() {
 
         sleep(Duration::from_secs(5)).await;
     }
-}
-
-#[tokio::main]
-async fn main() {
-    real_main().compat().await
 }

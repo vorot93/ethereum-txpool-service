@@ -52,14 +52,8 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
             let pool = self.pool.lock().await;
 
             for hash in all_hashes {
-                if hash.len() != H256::len_bytes() {
-                    return Err(tonic::Status::invalid_argument("invalid hash"));
-                }
-
-                let hash = H256::from_slice(&hash);
-
-                if pool.get(hash).is_none() {
-                    out.push(hash.to_fixed_bytes().to_vec())
+                if pool.get(hash.clone().into()).is_none() {
+                    out.push(hash)
                 }
             }
 
@@ -199,15 +193,7 @@ impl<DP: AccountInfoProvider, GP: GasPricer> Txpool for TxpoolService<DP, GP> {
             .into_inner()
             .hashes
             .into_iter()
-            .filter_map(|hash| {
-                if hash.len() == H256::len_bytes() {
-                    if let Some(tx) = pool.get(H256::from_slice(&hash)) {
-                        return Some(rlp::encode(tx).to_vec());
-                    }
-                }
-
-                None
-            })
+            .filter_map(|hash| pool.get(hash.into()).map(|tx| rlp::encode(tx).freeze()))
             .collect();
 
         Ok(tonic::Response::new(GetTransactionsReply { txs }))

@@ -32,22 +32,18 @@ impl AccountInfoProvider for TarpcDataProvider {
     ) -> anyhow::Result<Option<ethereum_txpool::AccountInfo>> {
         let (balance, nonce) = futures::future::try_join(
             async {
-                Ok::<_, anyhow::Error>(
-                    self.client
-                        .clone()
-                        .balance(context::current(), block, address)
-                        .await?
-                        .map_err(anyhow::Error::msg)?,
-                )
+                self.client
+                    .clone()
+                    .balance(context::current(), block, address)
+                    .await?
+                    .map_err(anyhow::Error::msg)
             },
             async {
-                Ok::<_, anyhow::Error>(
-                    self.client
-                        .clone()
-                        .nonce(context::current(), block, address)
-                        .await?
-                        .map_err(anyhow::Error::msg)?,
-                )
+                self.client
+                    .clone()
+                    .nonce(context::current(), block, address)
+                    .await?
+                    .map_err(anyhow::Error::msg)
             },
         )
         .await?;
